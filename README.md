@@ -8,6 +8,8 @@ Each block of the input is replaced by the tile whose average colour is closest 
 
 - **Three inputs:** still image, MP4 video, or live webcam
 - **Maximum tile variety:** if you have at least as many tiles as blocks, no tile repeats; otherwise tiles are reused as evenly as possible
+- **Better colour matching:** colours are compared in LAB space, which is closer to how people see colour than raw RGB
+- **Steady video:** in video and webcam mode a block keeps its tile until its colour really changes, so the mosaic doesn't flicker
 - **Low memory:** tiles are renamed by their average colour (`RRR_GGG_BBB_index.png`), so matching reads only filenames and tile pixels are loaded only when used
 - **Fast:** NumPy vectorised block averaging, no per-pixel loops
 
@@ -70,6 +72,7 @@ Press `q` in the window to quit. Add `--output webcam.mp4` to record. Use `--web
 | `--cache-dir` | Folder for renamed tiles | `tiles_ready` |
 | `--tile-size` | Tile edge in pixels | `50` (image), `16` (video/webcam) |
 | `--cols` | Tiles across the frame | original size (image), `48` (video/webcam) |
+| `--stability` | Video/webcam: keep a block's tile until its colour moves this far (LAB units). `0` turns it off, higher is steadier | `6` (video/webcam) |
 | `--rebuild` | Re-create the renamed tile folder | off |
 | `--show` | Preview window while rendering a video | off |
 
@@ -78,7 +81,7 @@ Press `q` in the window to quit. Add `--output webcam.mp4` to record. Use `--web
 1. **Prepare tiles:** crop to square, resize, save as `RRR_GGG_BBB_index.png` in `tiles_ready/`.
 2. **Read colours:** average colours come from the filenames only.
 3. **Split the input:** the frame is cropped to a multiple of the tile size and divided into a grid.
-4. **Match:** each block gets the closest-colour tile. A tile that reaches its usage cap (`ceil(blocks / tiles)`) is removed from the pool.
+4. **Match:** each block gets the closest-colour tile (in LAB space). In video, blocks whose colour barely changed keep last frame's tile. A tile that reaches its usage cap (`ceil(blocks / tiles)`) is removed from the pool.
 5. **Assemble:** chosen tiles are loaded on demand, kept in memory, and placed into the final image.
 
 ## Tips
@@ -86,6 +89,7 @@ Press `q` in the window to quit. Add `--output webcam.mp4` to record. Use `--web
 - **No repeats:** you need at least `cols × rows` tiles. For example, `--cols 30` on a 4:3 image needs about 30 × 23 = 690 tiles.
 - **More tiles with a wide range of colours** give better results.
 - **Run `--rebuild`** whenever you add or remove tiles, or change `--tile-size`. A cache made at 16px looks blurry if reused at 50px.
+- **Flicker or sluggish changes?** Lower `--stability` if the mosaic reacts too slowly to movement; raise it if tiles still shimmer.
 - **Smoother webcam:** lower `--cols` (for example `32`) for a higher frame rate.
 - **Bigger output:** increase `--tile-size` and `--cols`, but expect slower processing.
 
