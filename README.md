@@ -1,15 +1,15 @@
 # Photo Mosaic Generator
 
-A small Python script that rebuilds a target image out of a collection of small tile images, using OpenCV and NumPy.
+Rebuild a photo, an MP4 video, or your live webcam feed out of many small tile images.
 
-## How it works
+Each block of the input is replaced by the tile whose average colour is closest to the block's colour. Tiles are spread out so each one is used as few times as possible.
 
-1. **Load tiles** – scans a folder, keeps valid image files (JPG, PNG, BMP, WebP, TIFF), centre-crops each to a square and resizes it to `TILE_SIZE × TILE_SIZE`. Unreadable files are skipped.
-2. **Tile colours** – computes each tile's average BGR colour in one vectorised NumPy call.
-3. **Target image** – optionally rescales it, then centre-crops it so width and height are exact multiples of the tile size.
-4. **Matching** – splits the target into a grid, averages each block, and finds the tile with the smallest Euclidean colour distance. This is done as a single matrix multiplication per chunk (no per-block Python loops), so it stays fast even with thousands of tiles.
-5. **Assembly** – swaps every block for its matched tile using NumPy indexing and reshaping.
-6. **Save** – writes the result to your output path.
+## Features
+
+- **Three inputs:** still image, MP4 video, or live webcam
+- **Maximum tile variety:** if you have at least as many tiles as blocks, no tile repeats; otherwise tiles are reused as evenly as possible
+- **Low memory:** tiles are renamed by their average colour (`RRR_GGG_BBB_index.png`), so matching reads only filenames and tile pixels are loaded only when used
+- **Fast:** NumPy vectorised block averaging, no per-pixel loops
 
 ## Requirements
 
@@ -22,56 +22,83 @@ pip install opencv-python numpy
 
 ## Setup
 
-Project layout:
+Put your tile images (any size, any mix of jpg/png/bmp/webp/tif) in a `tiles/` folder:
 
 ```
 photo_mosaic.py
-tiles/          <- put your small source images here
-target.jpg      <- the image you want to turn into a mosaic
+tiles/
+    img001.jpg
+    img002.png
+    ...
 ```
 
-### Option A: edit the paths in the script
+The first run creates a `tiles_ready/` folder automatically. Each tile is square-cropped, resized, and saved with its average colour in the filename, for example `200_145_090_00012.png`.
 
-Open `photo_mosaic.py` and change the CONFIG section at the top:
+## Usage
 
-```python
-TILES_DIR = "tiles"          # folder of source images
-TARGET_IMAGE = "target.jpg"  # main image
-OUTPUT_IMAGE = "mosaic.jpg"  # where to save the result
-TILE_SIZE = 50               # tile edge length in pixels
-TARGET_COLS = None           # optional: tiles across (None = keep original size)
-```
-
-Then run:
+**Image**
 
 ```bash
-python photo_mosaic.py
+python photo_mosaic.py --target photo.jpg --output mosaic.jpg
 ```
 
-### Option B: command-line flags
+**Video (MP4)**
 
 ```bash
-python photo_mosaic.py --tiles-dir path/to/tiles --target path/to/photo.jpg --output path/to/result.jpg
+python photo_mosaic.py --video input.mp4 --output out.mp4
 ```
 
-| Flag | Meaning | Default |
-|------|---------|---------|
-| `--tiles-dir` | Folder of source images | `tiles` |
-| `--target` | Target image path | `target.jpg` |
-| `--output` | Output file path (extension sets format) | `mosaic.jpg` |
-| `--tile-size` | Tile edge length in pixels | `50` |
-| `--cols` | Resize target to this many tiles across | off |
+Add `--show` to preview while rendering (press `q` to stop).
+
+**Webcam**
+
+```bash
+python photo_mosaic.py --webcam
+```
+
+Press `q` in the window to quit. Add `--output webcam.mp4` to record. Use `--webcam 1` to pick another camera.
+
+## Options
+
+| Option | Description | Default |
+|---|---|---|
+| `--target` | Input still image | `target.jpg` |
+| `--video` | Input video file | - |
+| `--webcam [index]` | Use webcam | camera `0` |
+| `--output` | Output file | `mosaic.jpg` / `mosaic.mp4` |
+| `--tiles-dir` | Folder of original tile images | `tiles` |
+| `--cache-dir` | Folder for renamed tiles | `tiles_ready` |
+| `--tile-size` | Tile edge in pixels | `50` (image), `16` (video/webcam) |
+| `--cols` | Tiles across the frame | original size (image), `48` (video/webcam) |
+| `--rebuild` | Re-create the renamed tile folder | off |
+| `--show` | Preview window while rendering a video | off |
+
+## How it works
+
+1. **Prepare tiles:** crop to square, resize, save as `RRR_GGG_BBB_index.png` in `tiles_ready/`.
+2. **Read colours:** average colours come from the filenames only.
+3. **Split the input:** the frame is cropped to a multiple of the tile size and divided into a grid.
+4. **Match:** each block gets the closest-colour tile. A tile that reaches its usage cap (`ceil(blocks / tiles)`) is removed from the pool.
+5. **Assemble:** chosen tiles are loaded on demand, kept in memory, and placed into the final image.
 
 ## Tips
 
-- **Output size** = (tiles across × tile size) by (tiles down × tile size). A 4000 px wide photo with 50 px tiles gives 80 columns and a 4000 px mosaic. Use `--cols` (e.g. `--cols 60`) or a smaller `--tile-size` to control it.
-- **More tiles = better results.** A few hundred varied images is a reasonable minimum; a few thousand looks noticeably better.
-- **Colour variety matters.** Tiles should cover a wide range of colours and brightness levels.
-- **Repeats are allowed.** The same tile can appear many times, and with a small library you may see repeating patterns.
-- **Memory.** Matching runs in chunks of 4096 blocks (`CHUNK_SIZE`); lower it if you run short of RAM.
+- **No repeats:** you need at least `cols × rows` tiles. For example, `--cols 30` on a 4:3 image needs about 30 × 23 = 690 tiles.
+- **More tiles with a wide range of colours** give better results.
+- **Run `--rebuild`** whenever you add or remove tiles, or change `--tile-size`. A cache made at 16px looks blurry if reused at 50px.
+- **Smoother webcam:** lower `--cols` (for example `32`) for a higher frame rate.
+- **Bigger output:** increase `--tile-size` and `--cols`, but expect slower processing.
 
-## Troubleshooting
+## Limitations
 
-- `No valid images found` – check the tiles folder path and file extensions.
-- `Failed to write` – use a supported output extension such as `.jpg` or `.png`.
-- Mosaic looks washed out – add more tiles with a wider colour range.
+- Output videos have no audio. You can add it back with ffmpeg:
+
+  ```bash
+  ffmpeg -i out.mp4 -i input.mp4 -map 0:v -map 1:a -c copy -shortest final.mp4
+  ```
+
+- The usage cap can give a few blocks a slightly worse colour match in exchange for more variety.
+
+## License
+
+Add your license here (for example MIT).
