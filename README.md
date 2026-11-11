@@ -6,7 +6,7 @@ Each block of the input is replaced by the tile that matches it best. Tiles are 
 
 ## Example
 
-![Photo mosaic example](example.jpg)
+![Photo mosaic example](https://raw.githubusercontent.com/MeshanNawod/Photo-Mosaic-Generator/refs/heads/main/image.png)
 
 ## Features
 
