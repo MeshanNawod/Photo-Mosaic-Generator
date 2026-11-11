@@ -4,6 +4,10 @@ Rebuild a photo, an MP4 video, or your live webcam feed out of many small tile i
 
 Each block of the input is replaced by the tile that matches it best. Tiles are spread out so each one is used as few times as possible, and identical tiles are kept apart.
 
+## Example
+
+![Photo mosaic example](example.jpg)
+
 ## Features
 
 - **Three inputs:** still image, MP4 video, or live webcam
